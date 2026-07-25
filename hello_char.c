@@ -1,3 +1,4 @@
+#include <linux/slab.h>
 #include <linux/mutex.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
@@ -11,27 +12,24 @@
 #define DEVICE_NAME "hello"
 #define BUFFER_SIZE 128
 
-static char hello_buffer[BUFFER_SIZE];
+static char *hello_buffer;
 static size_t hello_buffer_len;
 static DEFINE_MUTEX(hello_lock);
 static dev_t hello_dev;
 static struct cdev hello_cdev;
 static struct class *hello_class;
 
-static int hello_open(struct inode *inode, struct file *file)
-{
+static int hello_open(struct inode *inode, struct file *file) {
   pr_info("hello device opened\n");
   return 0;
 }
 
-static int hello_release(struct inode *inode, struct file *file)
-{
+static int hello_release(struct inode *inode, struct file *file) {
   pr_info("hello device closed\n");
   return 0;
 }
 
-static ssize_t hello_read(struct file *file, char __user *buffer, size_t len, loff_t *offset)
-{
+static ssize_t hello_read(struct file *file, char __user *buffer, size_t len, loff_t *offset) {
   mutex_lock(&hello_lock);
   if (*offset >= hello_buffer_len) {
     mutex_unlock(&hello_lock);
@@ -51,8 +49,7 @@ static ssize_t hello_read(struct file *file, char __user *buffer, size_t len, lo
   return len;
 }
 
-static ssize_t hello_write(struct file *file, const char __user *buffer, size_t len, loff_t *offset)
-{
+static ssize_t hello_write(struct file *file, const char __user *buffer, size_t len, loff_t *offset) {
   ssize_t ret;
 
   if (len >= BUFFER_SIZE)
@@ -77,8 +74,7 @@ out:
   return ret;
 }
 
-static long hello_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
-{
+static long hello_ioctl(struct file *file, unsigned int cmd, unsigned long arg) {
   switch (cmd) {
   case HELLO_IOCTL_CLEAR:
     mutex_lock(&hello_lock);
@@ -102,13 +98,22 @@ static struct file_operations hello_fops = {
   .unlocked_ioctl = hello_ioctl,
 };
 
-static int __init hello_init(void)
-{
+static int __init hello_init(void) {
   int ret;
+
+  hello_buffer = kmalloc(BUFFER_SIZE, GFP_KERNEL);
+  if (!hello_buffer) {
+    pr_err("failed to allocate hello buffer\n");
+    return -ENOMEM;
+  }
+
+  hello_buffer[0] = '\0';
+  hello_buffer_len = 0;
 
   ret = alloc_chrdev_region(&hello_dev, 0, 1, DEVICE_NAME);
   if (ret < 0) {
     pr_err("failed to allocate character device region\n");
+    kfree(hello_buffer);
     return ret;
   }
 
@@ -119,6 +124,7 @@ static int __init hello_init(void)
   if (ret < 0) {
     pr_err("failed to add character device\n");
     unregister_chrdev_region(hello_dev, 1);
+    kfree(hello_buffer);
     return ret;
   }
 
@@ -127,6 +133,7 @@ static int __init hello_init(void)
     pr_err("failed to create device class\n");
     cdev_del(&hello_cdev);
     unregister_chrdev_region(hello_dev, 1);
+    kfree(hello_buffer);
     return PTR_ERR(hello_class);
   }
 
@@ -135,6 +142,7 @@ static int __init hello_init(void)
     class_destroy(hello_class);
     cdev_del(&hello_cdev);
     unregister_chrdev_region(hello_dev, 1);
+    kfree(hello_buffer);
     return -1;
   }
 
@@ -146,14 +154,14 @@ static int __init hello_init(void)
   return 0;
 }
 
-static void __exit hello_exit(void)
-{
+static void __exit hello_exit(void) {
   device_destroy(hello_class, hello_dev);
   class_destroy(hello_class);
   cdev_del(&hello_cdev);
   unregister_chrdev_region(hello_dev, 1);
 
   pr_info("unregistered /dev/%s\n", DEVICE_NAME);
+  kfree(hello_buffer);
 }
 
 module_init(hello_init);
