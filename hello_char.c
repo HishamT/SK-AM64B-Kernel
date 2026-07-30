@@ -98,8 +98,10 @@ static struct file_operations hello_fops = {
   .unlocked_ioctl = hello_ioctl,
 };
 
-static int __init hello_init(void) {
+static int __init hello_init(void)
+{
   int ret;
+  struct device *device;
 
   hello_buffer = kmalloc(BUFFER_SIZE, GFP_KERNEL);
   if (!hello_buffer) {
@@ -113,8 +115,7 @@ static int __init hello_init(void) {
   ret = alloc_chrdev_region(&hello_dev, 0, 1, DEVICE_NAME);
   if (ret < 0) {
     pr_err("failed to allocate character device region\n");
-    kfree(hello_buffer);
-    return ret;
+    goto fail_buffer;
   }
 
   cdev_init(&hello_cdev, &hello_fops);
@@ -123,27 +124,21 @@ static int __init hello_init(void) {
   ret = cdev_add(&hello_cdev, hello_dev, 1);
   if (ret < 0) {
     pr_err("failed to add character device\n");
-    unregister_chrdev_region(hello_dev, 1);
-    kfree(hello_buffer);
-    return ret;
+    goto fail_chrdev_region;
   }
 
   hello_class = class_create(DEVICE_NAME);
   if (IS_ERR(hello_class)) {
     pr_err("failed to create device class\n");
-    cdev_del(&hello_cdev);
-    unregister_chrdev_region(hello_dev, 1);
-    kfree(hello_buffer);
-    return PTR_ERR(hello_class);
+    ret = PTR_ERR(hello_class);
+    goto fail_cdev;
   }
 
-  if (IS_ERR(device_create(hello_class, NULL, hello_dev, NULL, DEVICE_NAME))) {
+  device = device_create(hello_class, NULL, hello_dev, NULL, DEVICE_NAME);
+  if (IS_ERR(device)) {
     pr_err("failed to create device\n");
-    class_destroy(hello_class);
-    cdev_del(&hello_cdev);
-    unregister_chrdev_region(hello_dev, 1);
-    kfree(hello_buffer);
-    return -1;
+    ret = PTR_ERR(device);
+    goto fail_class;
   }
 
   pr_info("registered /dev/%s with major %d minor %d\n",
@@ -152,6 +147,19 @@ static int __init hello_init(void) {
           MINOR(hello_dev));
 
   return 0;
+
+fail_class:
+  class_destroy(hello_class);
+
+fail_cdev:
+  cdev_del(&hello_cdev);
+
+fail_chrdev_region:
+  unregister_chrdev_region(hello_dev, 1);
+
+fail_buffer:
+  kfree(hello_buffer);
+  return ret;
 }
 
 static void __exit hello_exit(void) {
