@@ -26,6 +26,11 @@ static dev_t hello_dev;
 static struct class *hello_class;
 
 static int hello_open(struct inode *inode, struct file *file) {
+  struct hello_dev_data *data;
+
+  data = container_of(inode->i_cdev, struct hello_dev_data, cdev);
+  file->private_data = data;
+
   pr_info("hello device opened\n");
   return 0;
 }
@@ -37,19 +42,23 @@ static int hello_release(struct inode *inode, struct file *file) {
 
 static ssize_t hello_read(struct file *file, char __user *buffer, size_t len, loff_t *offset)
 {
+  struct hello_dev_data *data = file->private_data;
   ssize_t ret;
 
-  mutex_lock(&hello_data.lock);
+  if (!data)
+    return -ENODEV;
 
-  if (*offset >= hello_data.buffer_len) {
+  mutex_lock(&data->lock);
+
+  if (*offset >= data->buffer_len) {
     ret = 0;
     goto out;
   }
 
-  if (len > hello_data.buffer_len - *offset)
-    len = hello_data.buffer_len - *offset;
+  if (len > data->buffer_len - *offset)
+    len = data->buffer_len - *offset;
 
-  if (copy_to_user(buffer, hello_data.buffer + *offset, len)) {
+  if (copy_to_user(buffer, data->buffer + *offset, len)) {
     ret = -EFAULT;
     goto out;
   }
@@ -58,44 +67,53 @@ static ssize_t hello_read(struct file *file, char __user *buffer, size_t len, lo
   ret = len;
 
 out:
-  mutex_unlock(&hello_data.lock);
+  mutex_unlock(&data->lock);
   return ret;
 }
 
 static ssize_t hello_write(struct file *file, const char __user *buffer, size_t len, loff_t *offset)
 {
+  struct hello_dev_data *data = file->private_data;
   ssize_t ret;
+
+  if (!data)
+    return -ENODEV;
 
   if (len >= BUFFER_SIZE)
     len = BUFFER_SIZE - 1;
 
-  mutex_lock(&hello_data.lock);
+  mutex_lock(&data->lock);
 
-  if (copy_from_user(hello_data.buffer, buffer, len)) {
+  if (copy_from_user(data->buffer, buffer, len)) {
     ret = -EFAULT;
     goto out;
   }
 
-  hello_data.buffer[len] = '\0';
-  hello_data.buffer_len = len;
+  data->buffer[len] = '\0';
+  data->buffer_len = len;
 
-  pr_info("user wrote: %s\n", hello_data.buffer);
+  pr_info("user wrote: %s\n", data->buffer);
 
   ret = len;
 
 out:
-  mutex_unlock(&hello_data.lock);
+  mutex_unlock(&data->lock);
   return ret;
 }
 
 static long hello_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
+  struct hello_dev_data *data = file->private_data;
+
+  if (!data)
+    return -ENODEV;
+
   switch (cmd) {
   case HELLO_IOCTL_CLEAR:
-    mutex_lock(&hello_data.lock);
-    hello_data.buffer[0] = '\0';
-    hello_data.buffer_len = 0;
-    mutex_unlock(&hello_data.lock);
+    mutex_lock(&data->lock);
+    data->buffer[0] = '\0';
+    data->buffer_len = 0;
+    mutex_unlock(&data->lock);
 
     pr_info("hello buffer cleared\n");
     return 0;
