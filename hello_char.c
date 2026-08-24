@@ -18,6 +18,7 @@ static DEFINE_MUTEX(hello_lock);
 static dev_t hello_dev;
 static struct cdev hello_cdev;
 static struct class *hello_class;
+static struct device *hello_device;
 
 static int hello_open(struct inode *inode, struct file *file) {
   pr_info("hello device opened\n");
@@ -98,11 +99,25 @@ static struct file_operations hello_fops = {
   .unlocked_ioctl = hello_ioctl,
 };
 
+static ssize_t buffer_len_show(struct device *dev,
+                               struct device_attribute *attr,
+                               char *buf)
+{
+  ssize_t ret;
+
+  mutex_lock(&hello_lock);
+  ret = sysfs_emit(buf, "%zu\n", hello_buffer_len);
+  mutex_unlock(&hello_lock);
+
+  return ret;
+}
+
+static DEVICE_ATTR_RO(buffer_len);
+
 static int __init hello_init(void)
 {
   int ret;
-  struct device *device;
-
+  
   hello_buffer = kmalloc(BUFFER_SIZE, GFP_KERNEL);
   if (!hello_buffer) {
     pr_err("failed to allocate hello buffer\n");
@@ -134,11 +149,17 @@ static int __init hello_init(void)
     goto fail_cdev;
   }
 
-  device = device_create(hello_class, NULL, hello_dev, NULL, DEVICE_NAME);
-  if (IS_ERR(device)) {
+  hello_device = device_create(hello_class, NULL, hello_dev, NULL, DEVICE_NAME);
+  if (IS_ERR(hello_device)) {
     pr_err("failed to create device\n");
-    ret = PTR_ERR(device);
+    ret = PTR_ERR(hello_device);
     goto fail_class;
+  }
+
+  ret = device_create_file(hello_device, &dev_attr_buffer_len);
+  if (ret < 0) {
+    pr_err("failed to create buffer_len sysfs attribute\n");
+    goto fail_device;
   }
 
   pr_info("registered /dev/%s with major %d minor %d\n",
@@ -147,6 +168,9 @@ static int __init hello_init(void)
           MINOR(hello_dev));
 
   return 0;
+
+fail_device:
+  device_destroy(hello_class, hello_dev);
 
 fail_class:
   class_destroy(hello_class);
@@ -163,8 +187,6 @@ fail_buffer:
 }
 
 static void __exit hello_exit(void) {
-  device_destroy(hello_class, hello_dev);
-  class_destroy(hello_class);
   cdev_del(&hello_cdev);
   unregister_chrdev_region(hello_dev, 1);
 
