@@ -136,11 +136,15 @@ static ssize_t buffer_len_show(struct device *dev,
                                struct device_attribute *attr,
                                char *buf)
 {
+  struct hello_dev_data *data = dev_get_drvdata(dev);
   ssize_t ret;
 
-  mutex_lock(&hello_data.lock);
-  ret = sysfs_emit(buf, "%zu\n", hello_data.buffer_len);
-  mutex_unlock(&hello_data.lock);
+  if (!data)
+    return -ENODEV;
+
+  mutex_lock(&data->lock);
+  ret = sysfs_emit(buf, "%zu\n", data->buffer_len);
+  mutex_unlock(&data->lock);
 
   return ret;
 }
@@ -188,6 +192,7 @@ static int __init hello_init(void)
     ret = PTR_ERR(hello_data.device);
     goto fail_class;
   }
+  dev_set_drvdata(hello_data.device, &hello_data);
 
   ret = device_create_file(hello_data.device, &dev_attr_buffer_len);
   if (ret < 0) {
