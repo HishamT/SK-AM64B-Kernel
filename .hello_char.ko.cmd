@@ -1,0 +1,1 @@
+savedcmd_/home/techbreaux/kernel_practice/hello_char.ko := ld -r -EL  -maarch64elf -z noexecstack --no-warn-rwx-segments --build-id=sha1  -T scripts/module.lds -o /home/techbreaux/kernel_practice/hello_char.ko /home/techbreaux/kernel_practice/hello_char.o /home/techbreaux/kernel_practice/hello_char.mod.o /home/techbreaux/kernel_practice/.module-common.o

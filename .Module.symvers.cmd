@@ -1,0 +1,1 @@
+savedcmd_/home/techbreaux/kernel_practice/Module.symvers :=  scripts/mod/modpost -M        -o /home/techbreaux/kernel_practice/Module.symvers -n -T /home/techbreaux/kernel_practice/modules.order -i Module.symvers -e 
