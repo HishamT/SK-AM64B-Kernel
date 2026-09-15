@@ -1,3 +1,5 @@
+#include <linux/platform_device.h>
+#include <linux/of.h>
 #include <linux/slab.h>
 #include <linux/mutex.h>
 #include <linux/cdev.h>
@@ -12,6 +14,15 @@
 #define DEVICE_NAME "hello"
 #define BUFFER_SIZE 128
 
+static struct platform_device *hello_pdev;
+
+static const struct of_device_id hello_of_match[] = {
+  { .compatible = "hisham,hello" },
+  { }
+};
+
+MODULE_DEVICE_TABLE(of, hello_of_match);
+
 struct hello_dev_data {
   char *buffer;
   size_t buffer_len;
@@ -20,10 +31,13 @@ struct hello_dev_data {
   struct device *device;
 };
 
+
+
 static struct hello_dev_data hello_data;
 
 static dev_t hello_dev;
 static struct class *hello_class;
+
 
 static int hello_open(struct inode *inode, struct file *file) {
   struct hello_dev_data *data;
@@ -151,7 +165,7 @@ static ssize_t buffer_len_show(struct device *dev,
 
 static DEVICE_ATTR_RO(buffer_len);
 
-static int __init hello_init(void)
+static int hello_probe(struct platform_device *pdev)
 {
   int ret;
   
@@ -164,6 +178,9 @@ static int __init hello_init(void)
   hello_data.buffer[0] = '\0';
   hello_data.buffer_len = 0;
   mutex_init(&hello_data.lock);
+
+  platform_set_drvdata(pdev, &hello_data);
+
   ret = alloc_chrdev_region(&hello_dev, 0, 1, DEVICE_NAME);
   if (ret < 0) {
     pr_err("failed to allocate character device region\n");
@@ -224,17 +241,62 @@ fail_buffer:
   return ret;
 }
 
-static void __exit hello_exit(void)
+static void hello_remove(struct platform_device *pdev)
 {
-  device_remove_file(hello_data.device, &dev_attr_buffer_len);
+  struct hello_dev_data *data = platform_get_drvdata(pdev);
+
+  pr_info("hello platform device removed\n");
+
+  if (!data)
+    return;
+
+  device_remove_file(data->device, &dev_attr_buffer_len);
   device_destroy(hello_class, hello_dev);
   class_destroy(hello_class);
-  cdev_del(&hello_data.cdev);
+  cdev_del(&data->cdev);
   unregister_chrdev_region(hello_dev, 1);
-  kfree(hello_data.buffer);
-
-  pr_info("unregistered /dev/%s\n", DEVICE_NAME);
+  kfree(data->buffer);
 }
+
+static struct platform_driver hello_platform_driver = {
+  .probe = hello_probe,
+  .remove = hello_remove,
+  .driver = {
+    .name = "hello",
+    .of_match_table = hello_of_match,
+  },
+};
+
+static int __init hello_init(void)
+{
+  int ret;
+
+  ret = platform_driver_register(&hello_platform_driver);
+  if (ret < 0) {
+    pr_err("failed to register hello platform driver\n");
+    return ret;
+  }
+
+  hello_pdev = platform_device_register_simple("hello", -1, NULL, 0);
+  if (IS_ERR(hello_pdev)) {
+    pr_err("failed to register hello platform device\n");
+    ret = PTR_ERR(hello_pdev);
+    platform_driver_unregister(&hello_platform_driver);
+    return ret;
+  }
+
+  pr_info("hello platform driver registered\n");
+  return 0;
+}
+
+static void __exit hello_exit(void)
+{
+  platform_device_unregister(hello_pdev);
+  platform_driver_unregister(&hello_platform_driver);
+
+  pr_info("hello platform driver unregistered\n");
+}
+
 
 module_init(hello_init);
 module_exit(hello_exit);
