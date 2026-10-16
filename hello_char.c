@@ -10,11 +10,11 @@
 #include <linux/uaccess.h>
 #include <linux/types.h>
 #include "hello_ioctl.h"
+#include <linux/gpio/consumer.h>
 
 #define DEVICE_NAME "hello"
 #define BUFFER_SIZE 128
 
-static struct platform_device *hello_pdev;
 
 static const struct of_device_id hello_of_match[] = {
   { .compatible = "hisham,hello" },
@@ -29,6 +29,7 @@ struct hello_dev_data {
   struct mutex lock;
   struct cdev cdev;
   struct device *device;
+  struct gpio_desc *output_gpio;
 };
 
 
@@ -93,6 +94,9 @@ static ssize_t hello_write(struct file *file, const char __user *buffer, size_t 
   if (!data)
     return -ENODEV;
 
+  if (len == 0)
+    return 0;
+
   if (len >= BUFFER_SIZE)
     len = BUFFER_SIZE - 1;
 
@@ -106,7 +110,15 @@ static ssize_t hello_write(struct file *file, const char __user *buffer, size_t 
   data->buffer[len] = '\0';
   data->buffer_len = len;
 
-  pr_info("user wrote: %s\n", data->buffer);
+  if (data->buffer[0] == '1') {
+    gpiod_set_value_cansleep(data->output_gpio, 1);
+    pr_info("GPIO0_32 set HIGH\n");
+  } else if (data->buffer[0] == '0') {
+    gpiod_set_value_cansleep(data->output_gpio, 0);
+    pr_info("GPIO0_32 set LOW\n");
+  } else {
+    pr_info("user wrote: %s\n", data->buffer);
+  }
 
   ret = len;
 
@@ -181,6 +193,16 @@ static int hello_probe(struct platform_device *pdev)
 
   platform_set_drvdata(pdev, &hello_data);
 
+  hello_data.output_gpio = devm_gpiod_get(&pdev->dev, "output", GPIOD_OUT_LOW);
+
+  if (IS_ERR(hello_data.output_gpio)) {
+    ret = dev_err_probe(&pdev->dev, PTR_ERR(hello_data.output_gpio), "failed to get output GPIO\n");
+    kfree(hello_data.buffer);
+    hello_data.buffer = NULL;
+
+    return ret;
+  }
+
   ret = alloc_chrdev_region(&hello_dev, 0, 1, DEVICE_NAME);
   if (ret < 0) {
     pr_err("failed to allocate character device region\n");
@@ -221,6 +243,8 @@ static int hello_probe(struct platform_device *pdev)
           DEVICE_NAME,
           MAJOR(hello_dev),
           MINOR(hello_dev));
+  
+  
 
   return 0;
 
@@ -277,21 +301,12 @@ static int __init hello_init(void)
     return ret;
   }
 
-  hello_pdev = platform_device_register_simple("hello", -1, NULL, 0);
-  if (IS_ERR(hello_pdev)) {
-    pr_err("failed to register hello platform device\n");
-    ret = PTR_ERR(hello_pdev);
-    platform_driver_unregister(&hello_platform_driver);
-    return ret;
-  }
-
   pr_info("hello platform driver registered\n");
   return 0;
 }
 
 static void __exit hello_exit(void)
 {
-  platform_device_unregister(hello_pdev);
   platform_driver_unregister(&hello_platform_driver);
 
   pr_info("hello platform driver unregistered\n");
