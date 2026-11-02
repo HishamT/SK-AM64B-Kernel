@@ -2,6 +2,7 @@
 #include <linux/of.h>
 #include <linux/slab.h>
 #include <linux/mutex.h>
+#include <linux/interrupt.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/module.h>
@@ -29,7 +30,11 @@ struct hello_dev_data {
   struct mutex lock;
   struct cdev cdev;
   struct device *device;
+
   struct gpio_desc *output_gpio;
+  struct gpio_desc *input_gpio;
+
+  int input_irq;
 };
 
 
@@ -38,6 +43,25 @@ static struct hello_dev_data hello_data;
 
 static dev_t hello_dev;
 static struct class *hello_class;
+
+static irqreturn_t hello_button_irq_thread(int irq, void *dev_id) {
+  struct hello_dev_data *data = dev_id;
+  int value;
+
+  value = gpiod_get_value_cansleep(data->input_gpio);
+
+  if (value < 0) {
+    pr_err("failed to read button GPIO\n");
+    return IRQ_HANDLED;
+  }
+
+  if (value)
+    pr_info("button pressed\n");
+  else
+    pr_info("button released\n");
+
+  return IRQ_HANDLED;
+}
 
 
 static int hello_open(struct inode *inode, struct file *file) {
@@ -177,6 +201,25 @@ static ssize_t buffer_len_show(struct device *dev,
 
 static DEVICE_ATTR_RO(buffer_len);
 
+static ssize_t button_state_show(struct device *dev,
+                                 struct device_attribute *attr,
+                                 char *buf)
+{
+  struct hello_dev_data *data = dev_get_drvdata(dev);
+  int value;
+
+  if (!data)
+    return -ENODEV;
+
+  value = gpiod_get_value_cansleep(data->input_gpio);
+  if (value < 0)
+    return value;
+
+  return sysfs_emit(buf, "%d\n", value);
+}
+
+static DEVICE_ATTR_RO(button_state);
+
 static int hello_probe(struct platform_device *pdev)
 {
   int ret;
@@ -197,6 +240,17 @@ static int hello_probe(struct platform_device *pdev)
 
   if (IS_ERR(hello_data.output_gpio)) {
     ret = dev_err_probe(&pdev->dev, PTR_ERR(hello_data.output_gpio), "failed to get output GPIO\n");
+    kfree(hello_data.buffer);
+    hello_data.buffer = NULL;
+
+    return ret;
+  }
+
+  hello_data.input_gpio = devm_gpiod_get(&pdev->dev, "input", GPIOD_IN);
+
+  if (IS_ERR(hello_data.input_gpio)) {
+    ret = dev_err_probe(&pdev->dev, PTR_ERR(hello_data.input_gpio), "failed to get input GPIO\n");
+
     kfree(hello_data.buffer);
     hello_data.buffer = NULL;
 
@@ -239,12 +293,37 @@ static int hello_probe(struct platform_device *pdev)
     goto fail_device;
   }
 
+  ret = device_create_file(hello_data.device, &dev_attr_button_state);
+
+  if (ret < 0) goto err_buffer_len;
+
   pr_info("registered /dev/%s with major %d minor %d\n",
           DEVICE_NAME,
           MAJOR(hello_dev),
           MINOR(hello_dev));
   
-  
+  hello_data.input_irq = gpiod_to_irq(hello_data.input_gpio);
+
+  if (hello_data.input_irq < 0) {
+    ret = hello_data.input_irq;
+
+    pr_err("failed to map input GPIO to IRQ\n");
+
+    kfree(hello_data.buffer);
+    hello_data.buffer = NULL;
+
+    return ret;
+  }
+
+  ret = devm_request_threaded_irq(&pdev->dev, hello_data.input_irq, NULL, hello_button_irq_thread, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT, "hello_button", &hello_data);
+
+  if (ret < 0) {
+    dev_err(&pdev->dev, "failed to request button IRQ\n");
+    kfree(hello_data.buffer);
+    hello_data.buffer = NULL;
+
+    return ret;
+  }
 
   return 0;
 
@@ -260,6 +339,9 @@ fail_cdev:
 fail_chrdev_region:
   unregister_chrdev_region(hello_dev, 1);
 
+err_buffer_len:
+  device_remove_file(hello_data.device, &dev_attr_buffer_len);
+
 fail_buffer:
   kfree(hello_data.buffer);
   return ret;
@@ -274,6 +356,8 @@ static void hello_remove(struct platform_device *pdev)
   if (!data)
     return;
 
+  device_remove_file(data->device, &dev_attr_buffer_len);
+  device_remove_file(data->device, &dev_attr_button_state);
   device_remove_file(data->device, &dev_attr_buffer_len);
   device_destroy(hello_class, hello_dev);
   class_destroy(hello_class);

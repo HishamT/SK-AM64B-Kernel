@@ -1,0 +1,63 @@
+962-			ti,sci-dev-id = <0x03>;
+963-			ti,interrupt-ranges = <0x00 0x20 0x10>;
+964-			phandle = <0x13>;
+965-		};
+966-
+967:		gpio@600000 {
+968-			compatible = "ti,am64-gpio", "ti,keystone-gpio";
+969-			reg = <0x00 0x600000 0x00 0x100>;
+970-			gpio-controller;
+971-			#gpio-cells = <0x02>;
+972-			interrupt-parent = <0x13>;
+973-			interrupts = <0xbe 0xbf 0xc0 0xc1 0xc2 0xc3>;
+974-			interrupt-controller;
+975-			#interrupt-cells = <0x02>;
+976-			ti,ngpio = <0x57>;
+977-			ti,davinci-gpio-unbanked = <0x00>;
+978-			power-domains = <0x03 0x4d 0x01>;
+979-			clocks = <0x02 0x4d 0x00>;
+980-			clock-names = "gpio";
+981-			phandle = <0x16>;
+982-		};
+983-
+984-		gpio@601000 {
+985-			compatible = "ti,am64-gpio", "ti,keystone-gpio";
+986-			reg = <0x00 0x601000 0x00 0x100>;
+987-			gpio-controller;
+988-			#gpio-cells = <0x02>;
+989-			interrupt-parent = <0x13>;
+990-			interrupts = <0xb4 0xb5 0xb6 0xb7 0xb8 0xb9>;
+991-			interrupt-controller;
+992-			#interrupt-cells = <0x02>;
+--
+2646-		main_spi1 = "/bus@f4000/spi@20110000";
+2647-		main_spi2 = "/bus@f4000/spi@20120000";
+2648-		main_spi3 = "/bus@f4000/spi@20130000";
+2649-		main_spi4 = "/bus@f4000/spi@20140000";
+2650-		main_gpio_intr = "/bus@f4000/interrupt-controller@a00000";
+2651:		main_gpio0 = "/bus@f4000/gpio@600000";
+2652-		main_gpio1 = "/bus@f4000/gpio@601000";
+2653-		sdhci0 = "/bus@f4000/mmc@fa10000";
+2654-		wlcore = "/bus@f4000/mmc@fa10000/wlcore@2";
+2655-		sdhci1 = "/bus@f4000/mmc@fa00000";
+2656-		cpsw3g = "/bus@f4000/ethernet@8000000";
+2657-		cpsw_port1 = "/bus@f4000/ethernet@8000000/ethernet-ports/port@1";
+2658-		cpsw_port2 = "/bus@f4000/ethernet@8000000/ethernet-ports/port@2";
+2659-		cpsw3g_mdio = "/bus@f4000/ethernet@8000000/mdio@f00";
+2660-		cpsw3g_phy0 = "/bus@f4000/ethernet@8000000/mdio@f00/ethernet-phy@0";
+2661-		cpsw3g_phy1 = "/bus@f4000/ethernet@8000000/mdio@f00/ethernet-phy@1";
+2662-		main_cpts0 = "/bus@f4000/cpts@39000000";
+2663-		timesync_router = "/bus@f4000/mux-controller@a40000";
+2664-		usbss0 = "/bus@f4000/cdns-usb@f900000";
+2665-		usb0 = "/bus@f4000/cdns-usb@f900000/usb@f400000";
+2666-		tscadc0 = "/bus@f4000/tscadc@28001000";
+2667-		fss = "/bus@f4000/bus@fc00000";
+2668-		ospi0 = "/bus@f4000/bus@fc00000/spi@fc40000";
+2669-		hwspinlock = "/bus@f4000/spinlock@2a000000";
+2670-		mailbox0_cluster2 = "/bus@f4000/mailbox@29020000";
+2671-		mbox_main_r5fss0_core0 = "/bus@f4000/mailbox@29020000/mbox-main-r5fss0-core0";
+2672-		mbox_main_r5fss0_core1 = "/bus@f4000/mailbox@29020000/mbox-main-r5fss0-core1";
+2673-		mailbox0_cluster3 = "/bus@f4000/mailbox@29030000";
+2674-		mailbox0_cluster4 = "/bus@f4000/mailbox@29040000";
+2675-		mbox_main_r5fss1_core0 = "/bus@f4000/mailbox@29040000/mbox-main-r5fss1-core0";
+2676-		mbox_main_r5fss1_core1 = "/bus@f4000/mailbox@29040000/mbox-main-r5fss1-core1";

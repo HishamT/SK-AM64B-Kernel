@@ -1,0 +1,80 @@
+218-				clock-names = "gpio";
+219-				status = "reserved";
+220-				phandle = <0x5a>;
+221-			};
+222-
+223:			pinctrl@4084000 {
+224-				bootph-all;
+225-				compatible = "pinctrl-single";
+226-				reg = <0x00 0x4084000 0x00 0x84>;
+227-				#pinctrl-cells = <0x01>;
+228-				pinctrl-single,register-width = <0x20>;
+229-				pinctrl-single,function-mask = <0xffffffff>;
+230-				phandle = <0x5b>;
+231-			};
+232-
+233-			esm@4100000 {
+234-				bootph-pre-ram;
+235-				compatible = "ti,j721e-esm";
+236-				reg = <0x00 0x4100000 0x00 0x1000>;
+237-				ti,esm-pins = <0x00 0x01 0x02 0x55>;
+238-				phandle = <0x5c>;
+239-			};
+240-
+241-			m4fss@5000000 {
+242-				compatible = "ti,am64-m4fss";
+243-				reg = <0x00 0x5000000 0x00 0x30000 0x00 0x5040000 0x00 0x10000>;
+--
+437-				#reset-cells = <0x02>;
+438-				phandle = <0x06>;
+439-			};
+440-		};
+441-
+442:		pinctrl@f4000 {
+443-			bootph-all;
+444-			compatible = "pinctrl-single";
+445-			reg = <0x00 0xf4000 0x00 0x2d0>;
+446-			#pinctrl-cells = <0x01>;
+447-			pinctrl-single,register-width = <0x20>;
+448-			pinctrl-single,function-mask = <0xffffffff>;
+449-			phandle = <0x61>;
+450-
+451-			main-mmc1-default-pins {
+452-				bootph-all;
+453-				pinctrl-single,pins = <0x29c 0x54000 0x298 0x54000 0x294 0x54000 0x290 0x54000 0x28c 0x54000 0x288 0x54000 0x284 0x54000 0x280 0x54000 0x27c 0x54000>;
+454-				phandle = <0x18>;
+455-			};
+456-
+457-			main-uart0-default-pins {
+458-				bootph-all;
+459-				pinctrl-single,pins = <0x238 0x54000 0x23c 0x10000 0x230 0x54000 0x234 0x10000>;
+460-				phandle = <0x0f>;
+461-			};
+462-
+--
+2577-		mcu_i2c1 = "/bus@f4000/bus@4000000/i2c@4910000";
+2578-		mcu_spi0 = "/bus@f4000/bus@4000000/spi@4b00000";
+2579-		mcu_spi1 = "/bus@f4000/bus@4000000/spi@4b10000";
+2580-		mcu_gpio_intr = "/bus@f4000/bus@4000000/interrupt-controller@4210000";
+2581-		mcu_gpio0 = "/bus@f4000/bus@4000000/gpio@4201000";
+2582:		mcu_pmx0 = "/bus@f4000/bus@4000000/pinctrl@4084000";
+2583-		mcu_esm = "/bus@f4000/bus@4000000/esm@4100000";
+2584-		mcu_m4fss = "/bus@f4000/bus@4000000/m4fss@5000000";
+2585-		oc_sram = "/bus@f4000/sram@70000000";
+2586-		main_conf = "/bus@f4000/syscon@43000000";
+2587-		pcie0_ctrl = "/bus@f4000/syscon@43000000/pcie-ctrl@4070";
+2588-		serdes_ln_ctrl = "/bus@f4000/syscon@43000000/mux-controller@4080";
+2589-		phy_gmii_sel = "/bus@f4000/syscon@43000000/phy@4044";
+2590-		epwm_tbclk = "/bus@f4000/syscon@43000000/clock-controller@4130";
+2591-		gic500 = "/bus@f4000/interrupt-controller@1800000";
+2592-		gic_its = "/bus@f4000/interrupt-controller@1800000/msi-controller@1820000";
+2593-		dmss = "/bus@f4000/bus@48000000";
+2594-		secure_proxy_main = "/bus@f4000/bus@48000000/mailbox@4d000000";
+2595-		inta_main_dmss = "/bus@f4000/bus@48000000/interrupt-controller@48000000";
+2596-		main_bcdma = "/bus@f4000/bus@48000000/dma-controller@485c0100";
+2597-		main_pktdma = "/bus@f4000/bus@48000000/dma-controller@485c0000";
+2598-		dmsc = "/bus@f4000/system-controller@44043000";
+2599-		k3_pds = "/bus@f4000/system-controller@44043000/power-controller";
+2600-		k3_clks = "/bus@f4000/system-controller@44043000/clock-controller";
+2601-		k3_reset = "/bus@f4000/system-controller@44043000/reset-controller";
+2602:		main_pmx0 = "/bus@f4000/pinctrl@f4000";
