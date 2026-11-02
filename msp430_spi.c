@@ -2,19 +2,20 @@
 #include <linux/spi/spi.h>
 #include <linux/of.h>
 
-static int msp430_spi_test_transfer(struct spi_device *spi)
+static int msp430_spi_transfer(struct spi_device *spi,
+                               const u8 *tx_buf,
+                               size_t len)
 {
-  u8 tx_buf[] = { 0xA5, 0x11, 0x22, 0x33 };
-  u8 rx_buf[sizeof(tx_buf)] = { 0 };
-
+  u8 rx_buf[4] = { 0 };
   struct spi_transfer transfer = {
     .tx_buf = tx_buf,
     .rx_buf = rx_buf,
-    .len = sizeof(tx_buf),
-    .speed_hz = 500000,
+    .len = len,
   };
-
   int ret;
+
+  if (len != sizeof(rx_buf))
+    return -EINVAL;
 
   ret = spi_sync_transfer(spi, &transfer, 1);
   if (ret < 0) {
@@ -26,12 +27,12 @@ static int msp430_spi_test_transfer(struct spi_device *spi)
 
   dev_info(&spi->dev,
            "TX: %*ph\n",
-           (int)sizeof(tx_buf),
+           (int)len,
            tx_buf);
 
   dev_info(&spi->dev,
            "RX: %*ph\n",
-           (int)sizeof(rx_buf),
+           (int)len,
            rx_buf);
 
   return 0;
@@ -43,9 +44,37 @@ static ssize_t transfer_store(struct device *dev,
                               size_t count)
 {
   struct spi_device *spi = to_spi_device(dev);
+  u8 tx_buf[4];
+  unsigned int b0;
+  unsigned int b1;
+  unsigned int b2;
+  unsigned int b3;
   int ret;
 
-  ret = msp430_spi_test_transfer(spi);
+  ret = sscanf(buf,
+               "%x %x %x %x",
+               &b0,
+               &b1,
+               &b2,
+               &b3);
+
+  if (ret != 4)
+    return -EINVAL;
+
+  if (b0 > 0xff ||
+      b1 > 0xff ||
+      b2 > 0xff ||
+      b3 > 0xff)
+    return -EINVAL;
+
+  tx_buf[0] = b0;
+  tx_buf[1] = b1;
+  tx_buf[2] = b2;
+  tx_buf[3] = b3;
+
+  ret = msp430_spi_transfer(spi,
+                            tx_buf,
+                            sizeof(tx_buf));
   if (ret < 0)
     return ret;
 
