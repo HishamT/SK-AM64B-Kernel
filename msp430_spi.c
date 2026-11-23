@@ -7,10 +7,12 @@
 #include <linux/miscdevice.h>
 #include <linux/uaccess.h>
 
+#define MSP430_FRAME_LEN 4
+
 struct msp430_data {
   struct spi_device *spi;
   struct miscdevice miscdev;
-  u8 response[4];
+  u8 response[MSP430_FRAME_LEN];
   struct mutex lock;
 };
 
@@ -26,7 +28,7 @@ static int msp430_spi_transfer(struct spi_device *spi,
   };
   int ret;
 
-  if (len != 4)
+  if (len != MSP430_FRAME_LEN)
     return -EINVAL;
 
   ret = spi_sync_transfer(spi, &transfer, 1);
@@ -37,93 +39,9 @@ static int msp430_spi_transfer(struct spi_device *spi,
     return ret;
   }
 
-  dev_info(&spi->dev,
-           "TX: %*ph\n",
-           (int)len,
-           tx_buf);
-
-  dev_info(&spi->dev,
-           "RX: %*ph\n",
-           (int)len,
-           rx_buf);
-
   return 0;
 }
 
-static ssize_t transfer_store(struct device *dev,
-                              struct device_attribute *attr,
-                              const char *buf,
-                              size_t count)
-{
-  struct spi_device *spi = to_spi_device(dev);
-  struct msp430_data *data = spi_get_drvdata(spi);
-  u8 tx_buf[4];
-  unsigned int b0;
-  unsigned int b1;
-  unsigned int b2;
-  unsigned int b3;
-  int ret;
-
-  ret = sscanf(buf,
-               "%x %x %x %x",
-               &b0,
-               &b1,
-               &b2,
-               &b3);
-
-  if (ret != 4)
-    return -EINVAL;
-
-  if (b0 > 0xff ||
-      b1 > 0xff ||
-      b2 > 0xff ||
-      b3 > 0xff)
-    return -EINVAL;
-
-  tx_buf[0] = b0;
-  tx_buf[1] = b1;
-  tx_buf[2] = b2;
-  tx_buf[3] = b3;
-
-  mutex_lock(&data->lock);
-
-  ret = msp430_spi_transfer(spi,
-                            tx_buf,
-                            data->response,
-                            sizeof(tx_buf));
-
-  mutex_unlock(&data->lock);
-
-  if (ret < 0)
-    return ret;
-
-  return count;
-}
-
-static ssize_t response_show(struct device *dev,
-                             struct device_attribute *attr,
-                             char *buf)
-{
-  struct spi_device *spi = to_spi_device(dev);
-  struct msp430_data *data = spi_get_drvdata(spi);
-  ssize_t ret;
-
-  mutex_lock(&data->lock);
-
-  ret = sysfs_emit(buf,
-                   "%02x %02x %02x %02x\n",
-                   data->response[0],
-                   data->response[1],
-                   data->response[2],
-                   data->response[3]);
-
-  mutex_unlock(&data->lock);
-
-  return ret;
-}
-
-static DEVICE_ATTR_WO(transfer);
-static DEVICE_ATTR_RO(response);
 
 static ssize_t msp430_write(struct file *file,
                             const char __user *buf,
@@ -134,7 +52,8 @@ static ssize_t msp430_write(struct file *file,
   struct msp430_data *data =
       container_of(miscdev, struct msp430_data, miscdev);
 
-  u8 tx_buf[4];
+  u8 tx_buf[MSP430_FRAME_LEN];
+  u8 dummy_tx[MSP430_FRAME_LEN] = { 0 };
   int ret;
 
   if (count != sizeof(tx_buf))
@@ -145,15 +64,32 @@ static ssize_t msp430_write(struct file *file,
 
   mutex_lock(&data->lock);
 
+  /*
+   * Transaction 1:
+   * Send command to MSP430.
+   */
   ret = msp430_spi_transfer(data->spi,
-                            tx_buf,
-                            data->response,
-                            sizeof(tx_buf));
+                          tx_buf,
+                          NULL,
+                          sizeof(tx_buf));
+  if (ret < 0)
+    goto out;
 
+  /*
+   * Transaction 2:
+   * Clock the prepared response out of the MSP430.
+   */
+  ret = msp430_spi_transfer(data->spi,
+                            dummy_tx,
+                            data->response,
+                            sizeof(dummy_tx));
+
+out:
   mutex_unlock(&data->lock);
 
-  if (ret < 0)
-    return ret;
+  if (ret < 0) return ret;
+
+  *ppos = 0;
 
   return count;
 }
@@ -209,7 +145,6 @@ static int msp430_spi_probe(struct spi_device *spi)
     return -ENOMEM;
 
   mutex_init(&data->lock);
-  spi_set_drvdata(spi, data);
 
   data->spi = spi;
 
@@ -218,44 +153,18 @@ static int msp430_spi_probe(struct spi_device *spi)
   data->miscdev.fops = &msp430_fops;
   data->miscdev.parent = &spi->dev;
 
-  dev_info(&spi->dev,
-           "MSP430 SPI device probed\n");
+  spi_set_drvdata(spi, data);
 
-  dev_info(&spi->dev,
-           "max speed: %u Hz\n",
-           spi->max_speed_hz);
+  
 
-  dev_info(&spi->dev,
-           "chip select: %u\n",
-           spi_get_chipselect(spi, 0));
-
-  dev_info(&spi->dev,
-           "SPI mode: %u\n",
-           spi->mode);
-
-  ret = device_create_file(&spi->dev,
-                           &dev_attr_transfer);
-  if (ret < 0)
-    return ret;
-
-  ret = device_create_file(&spi->dev,
-                           &dev_attr_response);
 
   ret = misc_register(&data->miscdev);
   if (ret < 0) {
-    device_remove_file(&spi->dev,
-                      &dev_attr_response);
-
-    device_remove_file(&spi->dev,
-                      &dev_attr_transfer);
-
+    dev_err(&spi->dev, "failed to register misc device: %d\n", ret);
     return ret;
   }
-  if (ret < 0) {
-    device_remove_file(&spi->dev,
-                       &dev_attr_transfer);
-    return ret;
-  }
+
+  dev_info(&spi->dev, "MSP430 SPI device probed\n");
 
   return 0;
 }
@@ -265,11 +174,6 @@ static void msp430_spi_remove(struct spi_device *spi)
   struct msp430_data *data = spi_get_drvdata(spi);
 
   misc_deregister(&data->miscdev);
-  device_remove_file(&spi->dev,
-                     &dev_attr_response);
-
-  device_remove_file(&spi->dev,
-                     &dev_attr_transfer);
 
   dev_info(&spi->dev,
            "MSP430 SPI device removed\n");
